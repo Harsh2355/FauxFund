@@ -1,0 +1,63 @@
+version: '1.0.0'
+services:
+  app:
+    image: python:3.8
+    command: >
+      sh -c 'python3 -m venv fauxfund &&
+      . fauxfund/bin/activate &&
+      pip3 install --no-cache-dir -r requirements.txt &&
+      python3 app.py'
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ./:/app
+    
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      POSTGRES_DB: "${DB_NAME}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${DB_NAME} -U ${DB_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  migrate: &base_new_migrate
+    profiles: ["data"]
+    image: migrate/migrate
+    env_file:
+      - .env
+    entrypoint: 'migrate -database "postgres://${DB_USER}:${DB_PASSWORD}@192.168.32.2:5432/${DB_NAME}?sslmode=disable" -path /app/migrations'
+    command: up
+    depends_on:
+      - db
+    volumes:
+      - ./migrations:/app/migrations
+
+  rollback-migrate:
+    <<: *base_new_migrate
+    command: down 1
+
+  create-migrate:
+    <<: *base_new_migrate
+    entrypoint: "migrate create -dir /app/migrations -seq -ext sql"
+    command: ""
+
+  fix-migrate:
+    <<: *base_new_migrate
+    entrypoint: "migrate -database 'postgres://${DB_USER}:${DB_PASSWORD}@192.168.32.2:5432/${DB_NAME}?sslmode=disable' -path /app/migrations force"
+    command: ""
+
+volumes:
+  db_data:

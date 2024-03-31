@@ -1,0 +1,5 @@
+# Ignore the fauxfund folder
+fauxfund/
+
+# Ignore the .env file
+.env
